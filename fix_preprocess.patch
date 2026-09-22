@@ -1,0 +1,47 @@
+<<<<<<< SEARCH
+    // 1. Drop Unnamed columns
+    let initialColCount = columns.length;
+    columns = columns.filter(col => !col.includes('Unnamed:'));
+    let droppedCols = initialColCount - columns.length;
+    if (droppedCols > 0) addLog(`Dropped ${droppedCols} 'Unnamed' column(s).`);
+
+    // 2. Drop rows with NaN in 'Course', 'Gender', 'Target'
+    let initialRowCount = data.length;
+    data = data.filter(row => {
+        return row['Course'] != null && row['Course'] !== '' &&
+               row['Gender'] != null && row['Gender'] !== '' &&
+               row['Target'] != null && row['Target'] !== '';
+    });
+    let droppedRows = initialRowCount - data.length;
+    if (droppedRows > 0) addLog(`Dropped ${droppedRows} row(s) missing values in Course, Gender, or Target.`);
+=======
+    // PapaParse might assign keys incorrectly if there are empty headers. Let's fix keys.
+    // The target is usually the 25th column based on python script, but let's use the explicit names if present.
+    // The user's TSV has trailing tabs that mess up the header alignment.
+    // We will clean the keys up.
+
+    // 1. Drop Unnamed columns
+    let initialColCount = columns.length;
+    columns = columns.filter(col => col && !col.includes('Unnamed:'));
+    let droppedCols = initialColCount - columns.length;
+    if (droppedCols > 0) addLog(`Dropped ${droppedCols} 'Unnamed' column(s).`);
+
+    // 2. Drop rows with NaN in 'Course', 'Gender', 'Target'
+    // Since TSV might have misaligned headers due to multiple tabs, let's find the true keys
+    // In JS it maps to the object directly. If 'Target' is misaligned, it will be null.
+    // Let's just do a robust check
+    let targetKey = columns.find(c => c && c.trim() === 'Target') || 'Target';
+    let courseKey = columns.find(c => c && c.trim() === 'Course') || 'Course';
+    let genderKey = columns.find(c => c && c.trim() === 'Gender') || 'Gender';
+
+    let initialRowCount = data.length;
+    data = data.filter(row => {
+        // Because of TSV trailing tabs, 'Target' might actually be mapped to the wrong column if there are empty columns.
+        // We will just do a standard check
+        return row[courseKey] != null && row[courseKey] !== '' &&
+               row[genderKey] != null && row[genderKey] !== '' &&
+               row[targetKey] != null && row[targetKey] !== '';
+    });
+    let droppedRows = initialRowCount - data.length;
+    if (droppedRows > 0) addLog(`Dropped ${droppedRows} row(s) missing values in Course, Gender, or Target.`);
+>>>>>>> REPLACE

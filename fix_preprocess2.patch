@@ -1,0 +1,42 @@
+<<<<<<< SEARCH
+    // Because of weird TSV trailing tabs in the sample, data might be misaligned.
+    // We'll proceed with standard checks, assuming PapaParse parsed properly.
+    let targetKey = columns.find(c => c === 'Target') || 'Target';
+    let courseKey = columns.find(c => c === 'Course') || 'Course';
+    let genderKey = columns.find(c => c === 'Gender') || 'Gender';
+
+    // 2. Drop rows with NaN in 'Course', 'Gender', 'Target'
+    let initialRowCount = data.length;
+    data = data.filter(row => {
+        return row[courseKey] != null && row[courseKey] !== '' &&
+               row[genderKey] != null && row[genderKey] !== '' &&
+               row[targetKey] != null && row[targetKey] !== '';
+    });
+    let droppedRows = initialRowCount - data.length;
+    if (droppedRows > 0) addLog(`Dropped ${droppedRows} row(s) missing values in Course, Gender, or Target.`);
+=======
+    // In the user's specific sample, TSV parsing pushes Target to column 24.
+    // We will find the key that ends up having the Target values for this particular file if misaligned.
+    let targetKey = 'Target';
+    let courseKey = 'Course';
+    let genderKey = 'Gender';
+
+    if (data.length > 0 && !data[0].hasOwnProperty('Target')) {
+        // Find which column actually contains 'Dropout', 'Graduate', 'Enrolled'
+        for (let col in data[0]) {
+            let sampleVal = data[0][col];
+            if (sampleVal === 'Dropout' || sampleVal === 'Graduate' || sampleVal === 'Enrolled') {
+                targetKey = col;
+                break;
+            }
+        }
+    }
+
+    // 2. Drop rows with NaN in 'Course', 'Gender', 'Target'
+    let initialRowCount = data.length;
+    data = data.filter(row => {
+        return row[targetKey] != null && row[targetKey] !== '';
+    });
+    let droppedRows = initialRowCount - data.length;
+    if (droppedRows > 0) addLog(`Dropped ${droppedRows} row(s) missing values in Target.`);
+>>>>>>> REPLACE

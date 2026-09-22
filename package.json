@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "playwright": "^1.63.0"
+  },
+  "dependencies": {
+    "papaparse": "^5.7.0"
+  }
+}

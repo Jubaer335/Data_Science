@@ -1,0 +1,16 @@
+<<<<<<< SEARCH
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+=======
+            // Handle potentially tab-separated or comma-separated files gracefully
+            const isTsv = file.name.endsWith('.tsv') || file.name.endsWith('.txt');
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                delimiter: isTsv ? '\t' : undefined,
+                complete: function(results) {
+>>>>>>> REPLACE

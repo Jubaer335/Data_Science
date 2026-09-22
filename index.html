@@ -2,288 +2,157 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Data Analyzer & Visualizer</title>
-    <!-- Include PapaParse for CSV parsing -->
+    <title>CSV ML Pipeline Visualizer</title>
+    <!-- PapaParse for CSV parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- Include Plotly.js for visualizations -->
+    <!-- Plotly for Visualizations -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <!-- Include simple.css for basic, clean styling -->
-    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
+    <!-- TensorFlow.js for Neural Network -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+
     <style>
-        body {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        #upload-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            border: 2px dashed #ccc;
-            text-align: center;
-            border-radius: 8px;
-        }
-        #preprocessing-log {
-            background-color: #f9f9f9;
-            padding: 15px;
-            border-left: 5px solid #007bff;
-            margin-bottom: 30px;
-            display: none;
-            color: #333;
-        }
-        .viz-container {
-            margin-bottom: 40px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #eee;
-        }
-        .viz-description {
-            margin-top: 10px;
-            font-style: italic;
-            color: #555;
-        }
-        #visualizations-section {
-            display: none;
-        }
-        .chart {
-            width: 100%;
-            height: 400px;
-        }
+        body { font-family: sans-serif; padding: 20px; max-width: 1200px; margin: auto; }
+        .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        .viz-container { margin-bottom: 40px; }
+        .chart { width: 100%; height: 500px; }
+        ul { background: #f8f9fa; padding: 15px 35px; border-radius: 5px; }
+        .hidden { display: none; }
+        #loading { color: red; font-weight: bold; margin-top: 10px; }
+        .tab { display: inline-block; padding: 10px 20px; cursor: pointer; background: #eee; border: 1px solid #ccc; }
+        .tab.active { background: #007bff; color: #fff; }
+        .tab-content { display: none; padding: 20px; border: 1px solid #ccc; border-top: none; }
+        .tab-content.active { display: block; }
     </style>
 </head>
 <body>
-    <header>
-        <h1>CSV Data Analyzer & Visualizer</h1>
-        <p>Upload a CSV file to automatically preprocess, analyze, and visualize your data entirely in your browser.</p>
-    </header>
 
-    <main>
-        <section id="upload-section">
-            <h3>Upload your CSV</h3>
-            <input type="file" id="csv-file" accept=".csv" />
-            <p><small>Note: All processing happens in your browser. No data is sent to a server.</small></p>
-        </section>
+    <h1>Data Science & ML Pipeline Visualizer</h1>
 
-        <section id="preprocessing-log">
-            <h3>Preprocessing Steps Taken:</h3>
-            <ul id="log-list"></ul>
-        </section>
+    <div class="section">
+        <h2>1. Upload Data</h2>
+        <input type="file" id="csv-file" accept=".csv" />
+        <div id="loading" class="hidden">Processing Data & Training Models... Please wait.</div>
+    </div>
 
-        <section id="visualizations-section">
-            <h2>Data Visualizations</h2>
-            <div id="charts-container"></div>
-        </section>
-    </main>
+    <div>
+        <div id="tab-logs" class="tab active" onclick="switchTab('logs')">Preprocessing Logs</div>
+        <div id="tab-viz" class="tab" onclick="switchTab('viz')">Visualizations</div>
+        <div id="tab-ml" class="tab" onclick="switchTab('ml')">ML Results</div>
+    </div>
 
+    <div id="content-logs" class="tab-content active">
+        <ul id="log-list"></ul>
+    </div>
+
+    <div id="content-viz" class="tab-content">
+        <div id="charts-container"></div>
+    </div>
+
+    <div id="content-ml" class="tab-content">
+        <div id="ml-container"></div>
+    </div>
+
+    <script src="preprocess.js"></script>
+    <script src="ml.js"></script>
 
     <script>
-        document.getElementById('csv-file').addEventListener('change', function(e) {
-            const file = e.target.files[0];
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+
+            document.getElementById('tab-' + tabName).classList.add('active');
+            document.getElementById('content-' + tabName).classList.add('active');
+        }
+
+        document.getElementById('csv-file').addEventListener('change', function(event) {
+            const file = event.target.files[0];
             if (!file) return;
 
-            // Reset UI
+            document.getElementById('loading').classList.remove('hidden');
             document.getElementById('log-list').innerHTML = '';
-            document.getElementById('preprocessing-log').style.display = 'none';
             document.getElementById('charts-container').innerHTML = '';
-            document.getElementById('visualizations-section').style.display = 'none';
+            document.getElementById('ml-container').innerHTML = '';
 
+            const isTsv = file.name.endsWith('.tsv') || file.name.endsWith('.txt');
             Papa.parse(file, {
                 header: true,
-                dynamicTyping: true, // Automatically convert numbers and booleans
+                dynamicTyping: true,
                 skipEmptyLines: true,
+                delimiter: isTsv ? '\t' : undefined,
                 complete: function(results) {
-                    const rawData = results.data;
-                    if (rawData.length === 0) {
-                        alert("The CSV file appears to be empty.");
-                        return;
-                    }
-                    processData(rawData);
-                },
-                error: function(error) {
-                    alert("Error parsing CSV: " + error.message);
+                    let data = results.data;
+                    let columns = results.meta.fields;
+
+                    // Allow UI to update before heavy processing
+                    setTimeout(() => {
+                        runPipeline(data, columns);
+                    }, 100);
                 }
             });
         });
 
-        function addLog(message) {
-            const logList = document.getElementById('log-list');
-            const li = document.createElement('li');
-            li.textContent = message;
-            logList.appendChild(li);
-            document.getElementById('preprocessing-log').style.display = 'block';
+        function addLogUI(msg) {
+            let li = document.createElement('li');
+            li.textContent = msg;
+            document.getElementById('log-list').appendChild(li);
         }
 
-        function processData(rawData) {
-            addLog(`Successfully loaded CSV with ${rawData.length} rows and ${Object.keys(rawData[0]).length} columns.`);
+        async function runPipeline(data, columns) {
+            try {
+                // 1. Preprocessing
+                const preprocessed = preprocessData(data, columns);
+                preprocessed.logs.forEach(addLogUI);
+                data = preprocessed.data;
+                columns = preprocessed.columns;
 
-            let data = [...rawData];
-            let columns = Object.keys(data[0]);
-
-            // 1. Remove columns with >50% missing values
-            const totalRows = data.length;
-            const columnsToRemove = [];
-
-            columns.forEach(col => {
-                let missingCount = 0;
-                data.forEach(row => {
-                    if (row[col] === null || row[col] === undefined || row[col] === '') {
-                        missingCount++;
-                    }
-                });
-
-                if (missingCount / totalRows > 0.5) {
-                    columnsToRemove.push(col);
+                if (data.length === 0) {
+                    addLogUI("Error: No data remaining after preprocessing.");
+                    document.getElementById('loading').classList.add('hidden');
+                    return;
                 }
-            });
 
-            if (columnsToRemove.length > 0) {
-                data.forEach(row => {
-                    columnsToRemove.forEach(col => delete row[col]);
-                });
-                columns = columns.filter(col => !columnsToRemove.includes(col));
-                addLog(`Dropped column(s): ${columnsToRemove.join(', ')} because they had more than 50% missing values.`);
-            }
+                const numCols = columns.filter(col => typeof data[0][col] === 'number' && col !== 'Target_enc');
+                const catCols = columns.filter(col => typeof data[0][col] === 'string' && col !== 'Target');
 
-            // 2. Remove columns with only 1 unique value
-            const singleValueColumns = [];
-            columns.forEach(col => {
-                const uniqueValues = new Set();
-                data.forEach(row => {
-                    if (row[col] !== null && row[col] !== undefined && row[col] !== '') {
-                        uniqueValues.add(row[col]);
-                    }
-                });
-                if (uniqueValues.size <= 1) {
-                    singleValueColumns.push(col);
-                }
-            });
+                // 2. Pre-ML Visualizations
+                renderVisualizations(data, numCols, catCols);
 
-            if (singleValueColumns.length > 0) {
-                data.forEach(row => {
-                    singleValueColumns.forEach(col => delete row[col]);
-                });
-                columns = columns.filter(col => !singleValueColumns.includes(col));
-                addLog(`Dropped column(s): ${singleValueColumns.join(', ')} because they contained only 1 unique value (or no values).`);
-            }
-
-            // 3. Remove duplicate rows
-            const uniqueRows = new Set();
-            const duplicateIndices = [];
-            const dataWithoutDuplicates = [];
-
-            data.forEach((row, index) => {
-                const rowString = JSON.stringify(row);
-                if (uniqueRows.has(rowString)) {
-                    duplicateIndices.push(index);
+                // 3. Machine Learning
+                if(columns.includes('Target_enc')) {
+                    await runMLPipeline(data, columns.filter(c => c !== 'Target' && c !== 'Target_enc'));
                 } else {
-                    uniqueRows.add(rowString);
-                    dataWithoutDuplicates.push(row);
+                    addLogUI("Target column not found. Skipping ML models.");
                 }
-            });
 
-            if (duplicateIndices.length > 0) {
-                addLog(`Dropped ${duplicateIndices.length} duplicate row(s).`);
-                data = dataWithoutDuplicates;
+            } catch (err) {
+                console.error(err);
+                addLogUI("Error occurred: " + err.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
             }
-
-            // 4. Impute missing values (mean for numbers, drop row for categoricals)
-            let rowsDropped = 0;
-            const finalData = [];
-
-            // First calculate means for numerical columns
-            const colMeans = {};
-            columns.forEach(col => {
-                let sum = 0;
-                let count = 0;
-                let isNumeric = false;
-                data.forEach(row => {
-                    if (typeof row[col] === 'number') {
-                        isNumeric = true;
-                        sum += row[col];
-                        count++;
-                    }
-                });
-                if (isNumeric && count > 0) {
-                    colMeans[col] = sum / count;
-                }
-            });
-
-            data.forEach(row => {
-                let keepRow = true;
-                columns.forEach(col => {
-                    if (row[col] === null || row[col] === undefined || row[col] === '') {
-                        if (colMeans.hasOwnProperty(col)) {
-                            // Impute with mean
-                            row[col] = colMeans[col];
-                        } else {
-                            // Categorical/Text missing -> drop row
-                            keepRow = false;
-                        }
-                    }
-                });
-
-                if (keepRow) {
-                    finalData.push(row);
-                } else {
-                    rowsDropped++;
-                }
-            });
-
-            data = finalData;
-
-            if (Object.keys(colMeans).length > 0) {
-                addLog(`Filled missing numerical values with their column average.`);
-            }
-            if (rowsDropped > 0) {
-                addLog(`Dropped ${rowsDropped} row(s) because they contained missing categorical/text values.`);
-            }
-
-            addLog(`Preprocessing complete. Final dataset has ${data.length} rows and ${columns.length} columns.`);
-
-            if (data.length === 0) {
-                alert("After preprocessing, no data remains to visualize.");
-                return;
-            }
-
-            analyzeAndVisualize(data, columns);
         }
 
-        function analyzeAndVisualize(data, columns) {
-            // Determine column types (numerical vs categorical)
-            const numCols = [];
-            const catCols = [];
+        function createChartContainer(containerId, title, descriptionText) {
+            const id = 'chart-' + Math.random().toString(36).substr(2, 9);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'viz-container';
 
-            columns.forEach(col => {
-                let isNumeric = false;
-                for (let i = 0; i < Math.min(10, data.length); i++) {
-                    if (typeof data[i][col] === 'number') {
-                        isNumeric = true;
-                        break;
-                    }
-                }
-                if (isNumeric) {
-                    numCols.push(col);
-                } else {
-                    catCols.push(col);
-                }
-            });
+            const heading = document.createElement('h3');
+            heading.textContent = title;
+            wrapper.appendChild(heading);
 
-            // Calculate correlation matrix for numerical columns
-            const correlations = [];
-            for (let i = 0; i < numCols.length; i++) {
-                correlations[i] = [];
-                for (let j = 0; j < numCols.length; j++) {
-                    if (i === j) {
-                        correlations[i][j] = 1;
-                    } else if (i < j) {
-                        const corr = calculatePearsonCorrelation(data, numCols[i], numCols[j]);
-                        correlations[i][j] = corr;
-                    } else {
-                        correlations[i][j] = correlations[j][i];
-                    }
-                }
-            }
+            const chartDiv = document.createElement('div');
+            chartDiv.id = id;
+            chartDiv.className = 'chart';
+            wrapper.appendChild(chartDiv);
 
-            renderVisualizations(data, numCols, catCols, correlations);
+            const desc = document.createElement('p');
+            desc.className = 'viz-description';
+            desc.textContent = descriptionText;
+            wrapper.appendChild(desc);
+
+            document.getElementById(containerId).appendChild(wrapper);
+            return id;
         }
 
         function calculatePearsonCorrelation(data, col1, col2) {
@@ -307,142 +176,112 @@
             return num / den;
         }
 
-        function renderVisualizations(data, numCols, catCols, correlations) {
-            const container = document.getElementById('charts-container');
-            document.getElementById('visualizations-section').style.display = 'block';
-            let chartIdCounter = 0;
-
-            function createChartContainer(title, descriptionText) {
-                const id = 'chart-' + chartIdCounter++;
-                const wrapper = document.createElement('div');
-                wrapper.className = 'viz-container';
-
-                const heading = document.createElement('h3');
-                heading.textContent = title;
-                wrapper.appendChild(heading);
-
-                const chartDiv = document.createElement('div');
-                chartDiv.id = id;
-                chartDiv.className = 'chart';
-                wrapper.appendChild(chartDiv);
-
-                const desc = document.createElement('p');
-                desc.className = 'viz-description';
-                desc.textContent = descriptionText;
-                wrapper.appendChild(desc);
-
-                container.appendChild(wrapper);
-                return id;
-            }
-
-            // 1. Histograms for Numerical Columns
-            numCols.forEach(col => {
+        function renderVisualizations(data, numCols, catCols) {
+            // Boxplots
+            numCols.slice(0, 5).forEach(col => { // Limit to 5 to prevent overload
                 const colData = data.map(row => row[col]);
-                const sum = colData.reduce((a, b) => a + b, 0);
-                const mean = (sum / colData.length).toFixed(2);
-
-                const chartId = createChartContainer(
-                    `Distribution of ${col}`,
-                    `This histogram shows how the values for '${col}' are distributed. The average value is ${mean}.`
-                );
-
-                const trace = {
-                    x: colData,
-                    type: 'histogram',
-                    marker: { color: '#007bff' }
-                };
-                Plotly.newPlot(chartId, [trace], { margin: { t: 20 } });
+                const chartId = createChartContainer('charts-container', `Boxplot of ${col}`, `Distribution and outliers for ${col}.`);
+                Plotly.newPlot(chartId, [{ y: colData, type: 'box', name: col }], { margin: { t: 20 } });
             });
 
-            // 2. Bar Charts for Categorical Columns
-            catCols.forEach(col => {
-                const counts = {};
-                data.forEach(row => {
-                    const val = row[col];
-                    counts[val] = (counts[val] || 0) + 1;
-                });
+            // Target Imbalance Bar Chart
+            if (data.length > 0 && data[0].hasOwnProperty('Target')) {
+                let counts = {};
+                data.forEach(r => { counts[r.Target] = (counts[r.Target] || 0) + 1; });
+                let labels = Object.keys(counts);
+                let vals = Object.values(counts);
+                let percentages = vals.map(v => (v / data.length) * 100);
 
-                const labels = Object.keys(counts);
-                const values = Object.values(counts);
-
-                // Sort by frequency and take top 10 to avoid clutter
-                const sortedIndices = labels.map((_, i) => i).sort((a, b) => values[b] - values[a]).slice(0, 10);
-                const topLabels = sortedIndices.map(i => labels[i]);
-                const topValues = sortedIndices.map(i => values[i]);
-
-                const chartId = createChartContainer(
-                    `Frequency of Categories in ${col}`,
-                    `This bar chart displays the most common categories for '${col}'. The most frequent category is '${topLabels[0]}' with ${topValues[0]} occurrences.`
-                );
-
-                const trace = {
-                    x: topLabels,
-                    y: topValues,
-                    type: 'bar',
-                    marker: { color: '#28a745' }
-                };
-                Plotly.newPlot(chartId, [trace], { margin: { t: 20 } });
-            });
-
-            // 3. Correlation Heatmap
-            if (numCols.length > 1) {
-                const chartId = createChartContainer(
-                    `Correlation Heatmap`,
-                    `This heatmap displays the relationships between numerical variables. Darker reds indicate strong positive correlations, while darker blues indicate strong negative correlations.`
-                );
-
-                const trace = {
-                    z: correlations,
-                    x: numCols,
-                    y: numCols,
-                    type: 'heatmap',
-                    colorscale: 'RdBu',
-                    zmin: -1,
-                    zmax: 1
-                };
-                Plotly.newPlot(chartId, [trace], { margin: { t: 20 } });
+                const chartId = createChartContainer('charts-container', `Target Imbalance`, `Percentage distribution of the Target classes.`);
+                Plotly.newPlot(chartId, [{ x: labels, y: percentages, type: 'bar' }], { yaxis: { title: 'Percentage (%)' }});
             }
 
-            // 4. Scatter Plots for Highly Correlated Pairs
+            // Correlation Heatmap
             if (numCols.length > 1) {
-                const plottedPairs = new Set();
-                for (let i = 0; i < numCols.length; i++) {
-                    for (let j = i + 1; j < numCols.length; j++) {
-                        const corr = correlations[i][j];
-                        // Plot if strongly correlated (threshold 0.7 or -0.7)
-                        if (Math.abs(corr) > 0.7) {
-                            const pairName = `${numCols[i]}_${numCols[j]}`;
-                            if (!plottedPairs.has(pairName)) {
-                                plottedPairs.add(pairName);
+                let topNumCols = numCols.slice(0, 15); // Limit for performance
+                let correlations = topNumCols.map(c1 => topNumCols.map(c2 => calculatePearsonCorrelation(data, c1, c2)));
 
-                                const xData = data.map(row => row[numCols[i]]);
-                                const yData = data.map(row => row[numCols[j]]);
-
-                                const relationType = corr > 0 ? "positive" : "negative";
-                                const chartId = createChartContainer(
-                                    `Relationship: ${numCols[i]} vs ${numCols[j]}`,
-                                    `This scatter plot shows a strong ${relationType} correlation (${corr.toFixed(2)}) between '${numCols[i]}' and '${numCols[j]}'.`
-                                );
-
-                                const trace = {
-                                    x: xData,
-                                    y: yData,
-                                    mode: 'markers',
-                                    type: 'scatter',
-                                    marker: { color: '#dc3545' }
-                                };
-                                Plotly.newPlot(chartId, [trace], {
-                                    xaxis: { title: numCols[i] },
-                                    yaxis: { title: numCols[j] },
-                                    margin: { t: 20 }
-                                });
-                            }
-                        }
-                    }
-                }
+                const chartId = createChartContainer('charts-container', `Correlation Heatmap`, `Correlations between selected numerical features.`);
+                Plotly.newPlot(chartId, [{ z: correlations, x: topNumCols, y: topNumCols, type: 'heatmap', colorscale: 'RdBu', zmin: -1, zmax: 1 }]);
             }
         }
-    </script>
 
+        async function runMLPipeline(data, featureCols) {
+            addLogUI("Starting ML Pipeline (Train/Test Split & Scaling)...");
+
+            let { X_train, X_test, y_train, y_test } = trainTestSplit(data, 'Target_enc', 0.2);
+
+            let scaler = new MinMaxScaler();
+            scaler.fit(X_train, featureCols);
+            let X_train_scaled = scaler.transform(X_train, featureCols);
+            let X_test_scaled = scaler.transform(X_test, featureCols);
+
+            let X_train_mat = toMatrix(X_train_scaled, featureCols);
+            let X_test_mat = toMatrix(X_test_scaled, featureCols);
+            let numClasses = new Set(y_train).size;
+            let classLabels = Array.from(new Set(data.map(r=>r.Target))).sort();
+
+            let results = {};
+
+            // KNN
+            addLogUI("Training KNN (k=3)...");
+            let knn = new KNN(3);
+            knn.fit(X_train_mat, y_train);
+            let y_pred_knn = knn.predict(X_test_mat);
+            results['KNN'] = { acc: calculateAccuracy(y_test, y_pred_knn), pred: y_pred_knn };
+
+            // Naive Bayes
+            addLogUI("Training Gaussian Naive Bayes...");
+            let nb = new GaussianNB();
+            nb.fit(X_train_mat, y_train);
+            let y_pred_nb = nb.predict(X_test_mat);
+            results['Naive Bayes'] = { acc: calculateAccuracy(y_test, y_pred_nb), pred: y_pred_nb };
+
+            // Neural Net (TFJS)
+            addLogUI("Training Neural Network (TensorFlow.js)...");
+            const model = tf.sequential();
+            model.add(tf.layers.dense({ units: 64, activation: 'relu', inputShape: [featureCols.length] }));
+            model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+            model.add(tf.layers.dense({ units: numClasses, activation: 'softmax' }));
+
+            model.compile({ optimizer: tf.train.adam(0.001), loss: 'sparseCategoricalCrossentropy', metrics: ['accuracy'] });
+
+            // tfjs expects float32 arrays for dense inputs
+            const xs = tf.tensor2d(X_train_mat, [X_train_mat.length, featureCols.length], 'float32');
+            const ys = tf.tensor1d(y_train, 'float32'); // Workaround for tfjs sparseCategoricalCrossentropy floor bug with int32
+
+            // Limit epochs for browser performance
+            await model.fit(xs, ys, { epochs: 10, batchSize: 32 });
+
+            const xs_test = tf.tensor2d(X_test_mat, [X_test_mat.length, featureCols.length], 'float32');
+            const preds = model.predict(xs_test);
+            const y_pred_nn_tensor = preds.argMax(1);
+            const y_pred_nn = Array.from(y_pred_nn_tensor.dataSync());
+            results['Neural Net'] = { acc: calculateAccuracy(y_test, y_pred_nn), pred: y_pred_nn };
+
+            xs.dispose(); ys.dispose(); xs_test.dispose(); preds.dispose(); y_pred_nn_tensor.dispose();
+
+            // Visualize Results
+
+            // Accuracy Bar Chart
+            let modelNames = Object.keys(results);
+            let accuracies = modelNames.map(m => results[m].acc);
+
+            let accChartId = createChartContainer('ml-container', "Model Accuracy Comparison", "Comparison of accuracy across implemented models.");
+            Plotly.newPlot(accChartId, [{ x: modelNames, y: accuracies, type: 'bar' }]);
+
+            // Confusion Matrices
+            modelNames.forEach(m => {
+                let confMat = computeConfusionMatrix(y_test, results[m].pred, numClasses);
+                let cmChartId = createChartContainer('ml-container', `${m} Confusion Matrix`, `Actual vs Predicted classes. Rows = Actual, Columns = Predicted.`);
+                Plotly.newPlot(cmChartId, [{
+                    z: confMat, x: classLabels, y: classLabels, type: 'heatmap', colorscale: 'Greens', reversescale: true
+                }], { yaxis: { autorange: 'reversed' }});
+            });
+
+            addLogUI("ML Pipeline finished successfully!");
+        }
+
+    </script>
 </body>
 </html>
